@@ -95,6 +95,8 @@ const createScene = () => {
   box.castShadow = true;
   scene.add(box);
 
+
+
   // Геометрия: сфера
   const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(0.5, 32, 32),
@@ -106,7 +108,7 @@ const createScene = () => {
 
   // Загрузка текстуры дерева
   const textureLoader = new THREE.TextureLoader();
-  const woodTexture = textureLoader.load(`${import.meta.env.BASE_URL}textur.png`);
+  const woodTexture = textureLoader.load(`${import.meta.env.BASE_URL}texture2.png`);
 
   // URL изображения
   const imageURL = 'https://media.istockphoto.com/id/1368264124/ru/%D1%84%D0%BE%D1%82%D0%BE/%D1%8D%D0%BA%D1%81%D1%82%D1%80%D0%B5%D0%BC%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B9-%D0%BA%D1%80%D1%83%D0%BF%D0%BD%D1%8B%D0%B9-%D0%BF%D0%BB%D0%B0%D0%BD-%D0%B8%D0%B7%D1%83%D0%BC%D1%80%D1%83%D0%B4%D0%BD%D1%8B%D1%85-%D0%BE%D0%BA%D0%B5%D0%B0%D0%BD%D1%81%D0%BA%D0%B8%D1%85-%D0%B2%D0%BE%D0%BB%D0%BD.jpg?s=1024x1024&w=is&k=20&c=m3P-GCB-oJQLp4p6469cwtySgYPfT-K2GEoX4vxQ1Ig=';
@@ -125,11 +127,18 @@ const createScene = () => {
   plane.receiveShadow = true;
   scene.add(plane);
 
+
+  // Создаем CubeCamera для отражений
+  const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(128);
+  const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
+
   // Материал для двери
   const doorMaterial = new THREE.MeshStandardMaterial({
     map: woodTexture,
     roughness: 0.8,
     metalness: 0.1,
+    envMap: cubeRenderTarget.texture,
+
   });
 
   // Геометрия двери
@@ -355,6 +364,7 @@ const createScene = () => {
   // Анимация
   const animate = () => {
     requestAnimationFrame(animate);
+    cubeCamera.update(renderer, scene);
     controls.update();
     renderer.render(scene, camera);
   };
