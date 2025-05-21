@@ -24,6 +24,7 @@
 import { ref, watch, onMounted } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
 // Ссылки и реактивные свойства
 const container = ref<HTMLDivElement | null>(null);
@@ -42,6 +43,7 @@ let keyholeGroup2: THREE.Group;
 let stripesGroup: THREE.Group;
 let stripeWidth:number;
 let stripeHeight2:number;
+let cubeCamera: THREE.CubeCamera;
 
 const resetDimensions = () => {
   doorWidth.value= 1
@@ -49,7 +51,7 @@ const resetDimensions = () => {
 }
 
 
-const createScene = () => {
+const createScene = async () => {
   if (!container.value) {
     console.error('Контейнер для сцены не найден.');
     return;
@@ -75,32 +77,68 @@ const createScene = () => {
   // Добавляем canvas в DOM
   container.value.appendChild(renderer.domElement);
 
-  // Источник света
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(5, 10, 5);
-  light.castShadow = true;
-  scene.add(light);
   
-  
+  // CubeCamera для отражений
+  const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+    format: THREE.RGBFormat,
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter
+  });
+  cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
+  scene.add(cubeCamera);
+
+  // Загрузка HDRI для окружения
+  const hdriLoader = new RGBELoader();
+  try {
+    const texture = await hdriLoader.loadAsync(
+      'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/industrial_workshop_foundry_1k.hdr'
+    );
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = texture;
+    scene.background = texture;
+  } catch (error) {
+    console.error('Error loading HDRI:', error);
+  }
+
+
+   // Источники света
+  const light1 = new THREE.DirectionalLight(0xffffff, 1);
+  light1.position.set(5, 10, 5);
+  light1.castShadow = true;
+  light1.shadow.mapSize.width = 2048;
+  light1.shadow.mapSize.height = 2048;
+  scene.add(light1);
+
+  const light2 = new THREE.DirectionalLight(0xffffff, 0.5);
+  light2.position.set(-5, 5, -5);
+  scene.add(light2);
+
+ 
   // Окружение
   const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
   scene.add(ambientLight);
 
+  // Общий материал с отражениями
+  const reflectiveMaterial = new THREE.MeshStandardMaterial({
+    envMap: cubeRenderTarget.texture,
+    roughness: 0.2,
+    metalness: 0.8,
+    side: THREE.DoubleSide
+  });
+
   // Геометрия: куб
   const box = new THREE.Mesh(
     new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0xFFFFFF   })
+    reflectiveMaterial.clone()
   );
   box.position.set(3, 0.5, 0);
   box.castShadow = true;
   scene.add(box);
 
-
-
   // Геометрия: сфера
   const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(0.5, 32, 32),
-    new THREE.MeshStandardMaterial({ color: 0x0000FF  })
+    reflectiveMaterial.clone()
   );
   sphere.position.set(-3, 0.5, 0);
   sphere.castShadow = true;
@@ -114,35 +152,40 @@ const createScene = () => {
   woodTexture.repeat.set(1, 1); // Установите нужные значения повторения
   
   // URL изображения
-  const imageURL = 'https://media.istockphoto.com/id/1368264124/ru/%D1%84%D0%BE%D1%82%D0%BE/%D1%8D%D0%BA%D1%81%D1%82%D1%80%D0%B5%D0%BC%D0%B0%D0%BB%D1%8C%D0%BD%D1%8B%D0%B9-%D0%BA%D1%80%D1%83%D0%BF%D0%BD%D1%8B%D0%B9-%D0%BF%D0%BB%D0%B0%D0%BD-%D0%B8%D0%B7%D1%83%D0%BC%D1%80%D1%83%D0%B4%D0%BD%D1%8B%D1%85-%D0%BE%D0%BA%D0%B5%D0%B0%D0%BD%D1%81%D0%BA%D0%B8%D1%85-%D0%B2%D0%BE%D0%BB%D0%BD.jpg?s=1024x1024&w=is&k=20&c=m3P-GCB-oJQLp4p6469cwtySgYPfT-K2GEoX4vxQ1Ig=';
+  const imageURL = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/industrial_workshop_foundry_1k.hdr';
 
+  
   // загружаем изображение и устанавливаем его как фон
   textureLoader.load(imageURL, (texture) => {
     scene.background = texture;
   });
+  
 
-  // Плоскость (пол)
+// Плоскость (пол)
   const plane = new THREE.Mesh(
     new THREE.PlaneGeometry(20, 20),
-    new THREE.MeshStandardMaterial({ color: 0x808080 })
+    new THREE.MeshStandardMaterial({
+      color: 0x808080,
+      envMap: cubeRenderTarget.texture,
+      roughness: 0.3,
+      metalness: 0.5
+    })
   );
   plane.rotation.x = -Math.PI / 2;
   plane.receiveShadow = true;
   scene.add(plane);
 
 
-  // Создаем CubeCamera для отражений
-  const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(128);
-  const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
 
-  // Материал для двери
+
+  // // Материал для двери
   const doorMaterial = new THREE.MeshStandardMaterial({
     map: woodTexture,
-    roughness: 0.8,
-    metalness: 0.1,
     envMap: cubeRenderTarget.texture,
-
+    roughness: 0.3,
+    metalness: 0.3
   });
+
 
   // Геометрия двери
   const doorGeometry = new THREE.BoxGeometry(doorWidth.value, doorHeight.value, 0.1);
